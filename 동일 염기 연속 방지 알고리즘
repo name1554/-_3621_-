@@ -1,0 +1,95 @@
+from Bio.Seq import Seq
+
+def text_to_dna_ori(text):
+    # 텍스트 → 이진수 → DNA 염기서열
+    binary = ''.join(format(ord(c), '08b') for c in text)
+    mapping = {'00': 'A', '01': 'T', '10': 'G', '11': 'C'}
+    dna = ''.join(mapping[binary[i:i+2]] for i in range(0, len(binary), 2))
+    return Seq(dna)
+
+def dna_to_text_ori(dna_seq):
+    # DNA 염기서열 → 이진수
+    mapping = {'A': '00', 'T': '01', 'G': '10', 'C': '11'}
+    binary = ''.join(mapping[base] for base in str(dna_seq))
+        
+    # 이진수 → 텍스트
+    text = ''.join(chr(int(binary[i:i+8], 2)) for i in range(0, len(binary), 8))
+    return text
+
+ROTATION = {   #3진수 회전 인코딩 테이블
+    'A': {0: 'C', 1: 'G', 2: 'T'},
+    'C': {0: 'G', 1: 'T', 2: 'A'},
+    'G': {0: 'T', 1: 'A', 2: 'C'},
+    'T': {0: 'A', 1: 'C', 2: 'G'},
+}
+
+def bytes_to_base3(byte_data):  #바이트 데이터 → 3진수 변환
+    n = int.from_bytes(byte_data, 'big')
+    if n == 0:
+        return [0]
+    digits = []
+    while n > 0:
+        digits.append(n % 3)
+        n //= 3
+    return list(reversed(digits))
+
+def base3_to_bytes(digits, length):  #3진수 → 바이트 데이터 변환
+    n = 0
+    for d in digits:
+        n = n * 3 + d
+    return n.to_bytes(length, 'big')
+
+def text_to_dna(text):   #인코딩
+    byte_data = text.encode('utf-8')
+    trits = bytes_to_base3(byte_data)
+    dna = []
+    prev_base = 'A'  # 시작 기준 염기
+    for trit in trits:
+        base = ROTATION[prev_base][trit]
+        dna.append(base)
+        prev_base = base
+    return Seq(''.join(dna))
+
+def dna_to_text(dna_seq, original_length):   #디코딩
+    REV_ROTATION = {
+        prev: {v: k for k, v in table.items()}
+        for prev, table in ROTATION.items()
+    }
+    trits = []
+    prev_base = 'A'
+    for base in str(dna_seq):
+        trit = REV_ROTATION[prev_base][base]
+        trits.append(trit)
+        prev_base = base
+    byte_data = base3_to_bytes(trits, original_length)
+    return byte_data.decode('utf-8')
+
+
+def check_homopolymer(dna, n=2): #연속 염기 탐지
+    found = []
+    for i in range(len(dna) - n + 1):
+        if len(set(dna[i:i+n])) == 1:
+            found.append(dna[i:i+n])
+    return found
+
+if __name__ == "__main__":  #실행
+    text = input("텍스트 입력: ")
+    byte_data = text.encode('utf-8')
+
+    dna_ori = text_to_dna_ori(text)
+    dna = text_to_dna(text)
+    decoded = dna_to_text(dna, len(byte_data))
+    hp = check_homopolymer(str(dna))
+    hp_ori = check_homopolymer(str(dna_ori))
+
+    restore = "성공" if text == decoded else "실패"
+
+    print(f"\n기존 인코딩 결과: {text}")
+    print(f"\n기존 인코딩 결과: {dna_ori}")
+    print(f"연속 염기: {hp_ori if hp_ori else '없음'}")
+
+    print(f"\n인코딩 결과: {dna}")
+    print(f"염기 수: {len(dna)}")
+    print(f"디코딩 결과: {decoded}")
+    print(f"복원 {restore}")
+    print(f"연속 염기: {hp if hp else '없음'}")
