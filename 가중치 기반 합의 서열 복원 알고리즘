@@ -3,10 +3,7 @@ from Bio.SeqRecord import SeqRecord
 import random
 from collections import defaultdict
 
-# =====================================
 # 기본 인코딩
-# =====================================
-
 def text_to_dna_ori(text):
     binary = ''.join(format(ord(c), '08b') for c in text)
     mapping = {'00': 'A', '01': 'T', '10': 'G', '11': 'C'}
@@ -20,10 +17,8 @@ def dna_to_text_ori(dna):
         for i in range(0,len(binary),8)
     )
 
-# =====================================
-# 3진수 회전 인코딩
-# =====================================
 
+# 3진수 회전 인코딩
 ROTATION = {
     'A': {0:'C',1:'G',2:'T'},
     'C': {0:'G',1:'T',2:'A'},
@@ -87,10 +82,8 @@ def dna_to_text(dna,length):
         length
     ).decode('utf-8')
 
-# =====================================
-# 연속 염기 분석
-# =====================================
 
+# 연속 염기 분석
 def count_homopolymer(dna,n=3):
 
     count = 0
@@ -101,10 +94,8 @@ def count_homopolymer(dna,n=3):
 
     return count
 
-# =====================================
-# 실험1
-# =====================================
 
+# 실험1
 def experiment_homopolymer(text):
 
     print("\n===== 실험1 =====")
@@ -139,10 +130,8 @@ def experiment_homopolymer(text):
         "성공" if decoded == text else "실패"
     )
 
-# =====================================
-# FASTQ 생성
-# =====================================
 
+# FASTQ 생성
 def add_noise(dna,error_rate=0.05):
 
     bases = ['A','C','G','T']
@@ -201,10 +190,8 @@ def generate_reads(
 
     return records
 
-# =====================================
-# Consensus 복구
-# =====================================
 
+# Consensus 복구
 def phred_weight(score):
 
     return 10 ** (score/10)
@@ -235,10 +222,8 @@ def recover_consensus(records):
 
     return ''.join(recovered)
 
-# =====================================
-# 오류율 계산
-# =====================================
 
+# 오류율 계산
 def error_rate(a,b):
 
     error = sum(
@@ -248,10 +233,8 @@ def error_rate(a,b):
 
     return error/len(a)
 
-# =====================================
-# 커버리지 실험
-# =====================================
 
+# 커버리지 실험
 def coverage_experiment(
         text,
         error_rate_sim=0.05):
@@ -283,10 +266,8 @@ def coverage_experiment(
             f"(오류율 {after_error*100:.2f}%)"
         )
 
-# =====================================
-# 실험2
-# =====================================
 
+# 실험2
 def experiment_fastq(
         text,
         error_rate_sim=0.05,
@@ -343,10 +324,8 @@ def experiment_fastq(
     print("복구 DNA")
     print(recovered)
 
-# =====================================
-# 실행
-# =====================================
 
+# 실행
 if __name__ == "__main__":
 
     random.seed(42)
