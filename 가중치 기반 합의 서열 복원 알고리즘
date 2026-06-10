@@ -1,0 +1,367 @@
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+import random
+from collections import defaultdict
+
+# =====================================
+# 기본 인코딩
+# =====================================
+
+def text_to_dna_ori(text):
+    binary = ''.join(format(ord(c), '08b') for c in text)
+    mapping = {'00': 'A', '01': 'T', '10': 'G', '11': 'C'}
+    return ''.join(mapping[binary[i:i+2]] for i in range(0, len(binary), 2))
+
+def dna_to_text_ori(dna):
+    mapping = {'A':'00','T':'01','G':'10','C':'11'}
+    binary = ''.join(mapping[b] for b in dna)
+    return ''.join(
+        chr(int(binary[i:i+8],2))
+        for i in range(0,len(binary),8)
+    )
+
+# =====================================
+# 3진수 회전 인코딩
+# =====================================
+
+ROTATION = {
+    'A': {0:'C',1:'G',2:'T'},
+    'C': {0:'G',1:'T',2:'A'},
+    'G': {0:'T',1:'A',2:'C'},
+    'T': {0:'A',1:'C',2:'G'}
+}
+
+def bytes_to_base3(byte_data):
+    n = int.from_bytes(byte_data,'big')
+
+    if n == 0:
+        return [0]
+
+    digits = []
+
+    while n:
+        digits.append(n % 3)
+        n //= 3
+
+    return list(reversed(digits))
+
+def base3_to_bytes(digits,length):
+    n = 0
+
+    for d in digits:
+        n = n*3 + d
+
+    return n.to_bytes(length,'big')
+
+def text_to_dna(text):
+
+    byte_data = text.encode('utf-8')
+    trits = bytes_to_base3(byte_data)
+
+    dna = []
+    prev = 'A'
+
+    for t in trits:
+        base = ROTATION[prev][t]
+        dna.append(base)
+        prev = base
+
+    return ''.join(dna)
+
+def dna_to_text(dna,length):
+
+    rev = {
+        p:{v:k for k,v in table.items()}
+        for p,table in ROTATION.items()
+    }
+
+    trits = []
+    prev = 'A'
+
+    for base in dna:
+        trits.append(rev[prev][base])
+        prev = base
+
+    return base3_to_bytes(
+        trits,
+        length
+    ).decode('utf-8')
+
+# =====================================
+# 연속 염기 분석
+# =====================================
+
+def count_homopolymer(dna,n=3):
+
+    count = 0
+
+    for i in range(len(dna)-n+1):
+        if len(set(dna[i:i+n])) == 1:
+            count += 1
+
+    return count
+
+# =====================================
+# 실험1
+# =====================================
+
+def experiment_homopolymer(text):
+
+    print("\n===== 실험1 =====")
+
+    dna_ori = text_to_dna_ori(text)
+    dna_new = text_to_dna(text)
+
+    decoded = dna_to_text(
+        dna_new,
+        len(text.encode())
+    )
+
+    print("원본 방식")
+    print(dna_ori)
+    print(
+        "연속 염기:",
+        count_homopolymer(dna_ori)
+    )
+
+    print()
+
+    print("회전 인코딩")
+    print(dna_new)
+    print(
+        "연속 염기:",
+        count_homopolymer(dna_new)
+    )
+
+    print()
+    print(
+        "복원 :",
+        "성공" if decoded == text else "실패"
+    )
+
+# =====================================
+# FASTQ 생성
+# =====================================
+
+def add_noise(dna,error_rate=0.05):
+
+    bases = ['A','C','G','T']
+
+    noisy = []
+    scores = []
+
+    for b in dna:
+
+        if random.random() < error_rate:
+
+            wrong = [x for x in bases if x != b]
+
+            noisy.append(
+                random.choice(wrong)
+            )
+
+            scores.append(
+                random.randint(5,15)
+            )
+
+        else:
+
+            noisy.append(b)
+
+            scores.append(
+                random.randint(30,40)
+            )
+
+    return ''.join(noisy), scores
+
+def generate_reads(
+        dna,
+        num_reads=10,
+        error_rate=0.05):
+
+    records = []
+
+    for i in range(num_reads):
+
+        seq, scores = add_noise(
+            dna,
+            error_rate
+        )
+
+        r = SeqRecord(
+            Seq(seq),
+            id=f"read{i+1}"
+        )
+
+        r.letter_annotations[
+            "phred_quality"
+        ] = scores
+
+        records.append(r)
+
+    return records
+
+# =====================================
+# Consensus 복구
+# =====================================
+
+def phred_weight(score):
+
+    return 10 ** (score/10)
+
+def recover_consensus(records):
+
+    length = len(records[0].seq)
+
+    recovered = []
+
+    for pos in range(length):
+
+        weights = defaultdict(float)
+
+        for r in records:
+
+            base = str(r.seq)[pos]
+
+            score = r.letter_annotations[
+                "phred_quality"
+            ][pos]
+
+            weights[base] += phred_weight(score)
+
+        recovered.append(
+            max(weights,key=weights.get)
+        )
+
+    return ''.join(recovered)
+
+# =====================================
+# 오류율 계산
+# =====================================
+
+def error_rate(a,b):
+
+    error = sum(
+        x!=y
+        for x,y in zip(a,b)
+    )
+
+    return error/len(a)
+
+# =====================================
+# 커버리지 실험
+# =====================================
+
+def coverage_experiment(
+        text,
+        error_rate_sim=0.05):
+
+    print("\n===== 커버리지 실험 =====")
+
+    dna = text_to_dna(text)
+
+    for reads in [1, 3, 5, 10, 20]:
+
+        records = generate_reads(
+            dna,
+            num_reads=reads,
+            error_rate=error_rate_sim
+        )
+
+        recovered = recover_consensus(records)
+
+        after_error = error_rate(
+            dna,
+            recovered
+        )
+
+        accuracy = (1 - after_error) * 100
+
+        print(
+            f"{reads:2d}회 시퀀싱 → "
+            f"복구 정확도 {accuracy:.2f}% "
+            f"(오류율 {after_error*100:.2f}%)"
+        )
+
+# =====================================
+# 실험2
+# =====================================
+
+def experiment_fastq(
+        text,
+        error_rate_sim=0.05,
+        num_reads=10):
+
+    print("\n===== 실험2 =====")
+
+    dna = text_to_dna(text)
+
+    records = generate_reads(
+        dna,
+        num_reads,
+        error_rate_sim
+    )
+
+    before = []
+
+    for r in records:
+
+        before.append(
+            error_rate(
+                dna,
+                str(r.seq)
+            )
+        )
+
+    avg_before = (
+        sum(before)
+        / len(before)
+    )
+
+    recovered = recover_consensus(
+        records
+    )
+
+    after = error_rate(
+        dna,
+        recovered
+    )
+
+    print(
+        f"평균 오류율 : {avg_before*100:.2f}%"
+    )
+
+    print(
+        f"복구 후 오류율 : {after*100:.2f}%"
+    )
+
+    print()
+    print("원본 DNA")
+    print(dna)
+
+    print()
+    print("복구 DNA")
+    print(recovered)
+
+# =====================================
+# 실행
+# =====================================
+
+if __name__ == "__main__":
+
+    random.seed(42)
+
+    text = input("텍스트 입력 : ")
+
+    experiment_homopolymer(text)
+
+    experiment_fastq(
+        text,
+        error_rate_sim=0.05,
+        num_reads=10
+    )
+
+    coverage_experiment(
+        text,
+        error_rate_sim=0.05
+    )  
